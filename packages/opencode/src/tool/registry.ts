@@ -12,10 +12,8 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
-import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
-import path from "path"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
@@ -35,24 +33,21 @@ import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
+import path from "path"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
   type State = {
-    custom: Tool.Info[]
+    custom: Tool.Def[]
+    builtin: Tool.Def[]
   }
 
   export interface Interface {
     readonly ids: () => Effect.Effect<string[]>
-    readonly named: {
-      task: Tool.Info
-      read: Tool.Info
-    }
-    readonly tools: (
-      model: { providerID: ProviderID; modelID: ModelID },
-      agent?: Agent.Info,
-    ) => Effect.Effect<(Tool.Def & { id: string })[]>
+    readonly all: () => Effect.Effect<Tool.Def[]>
+    readonly tools: (model: { providerID: ProviderID; modelID: ModelID }) => Effect.Effect<Tool.Def[]>
+    readonly fromID: (id: string) => Effect.Effect<Tool.Def>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -65,33 +60,31 @@ export namespace ToolRegistry {
         const plugin = yield* Plugin.Service
 
         const build = <T extends Tool.Info>(tool: T | Effect.Effect<T, never, any>) =>
-          Effect.isEffect(tool) ? tool : Effect.succeed(tool)
+          Effect.isEffect(tool) ? tool.pipe(Effect.flatMap(Tool.init)) : Tool.init(tool)
 
         const state = yield* InstanceState.make<State>(
           Effect.fn("ToolRegistry.state")(function* (ctx) {
-            const custom: Tool.Info[] = []
+            const custom: Tool.Def[] = []
 
-            function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+            function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
               return {
                 id,
-                init: async (initCtx) => ({
-                  parameters: z.object(def.args),
-                  description: def.description,
-                  execute: async (args, toolCtx) => {
-                    const pluginCtx = {
-                      ...toolCtx,
-                      directory: ctx.directory,
-                      worktree: ctx.worktree,
-                    } as unknown as PluginToolContext
-                    const result = await def.execute(args as any, pluginCtx)
-                    const out = await Truncate.output(result, {}, initCtx?.agent)
-                    return {
-                      title: "",
-                      output: out.truncated ? out.content : result,
-                      metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
-                    }
-                  },
-                }),
+                parameters: z.object(def.args),
+                description: def.description,
+                execute: async (args, toolCtx) => {
+                  const pluginCtx = {
+                    ...toolCtx,
+                    directory: ctx.directory,
+                    worktree: ctx.worktree,
+                  } as unknown as PluginToolContext
+                  const result = await def.execute(args as any, pluginCtx)
+                  const out = await Truncate.output(result, {})
+                  return {
+                    title: "",
+                    output: out.truncated ? out.content : result,
+                    metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+                  }
+                },
               }
             }
 
@@ -117,71 +110,60 @@ export namespace ToolRegistry {
               }
             }
 
-            return { custom }
+            const cfg = yield* config.get()
+            const question =
+              ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+
+            return {
+              custom,
+              builtin: yield* Effect.forEach(
+                [
+                  InvalidTool,
+                  BashTool,
+                  ReadTool,
+                  GlobTool,
+                  GrepTool,
+                  EditTool,
+                  WriteTool,
+                  TaskTool,
+                  WebFetchTool,
+                  TodoWriteTool,
+                  WebSearchTool,
+                  CodeSearchTool,
+                  SkillTool,
+                  ApplyPatchTool,
+                  ...(question ? [QuestionTool] : []),
+                  ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
+                  ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
+                  ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
+                ],
+                build,
+                { concurrency: "unbounded" },
+              ),
+            }
           }),
         )
 
-        const invalid = yield* build(InvalidTool)
-        const ask = yield* build(QuestionTool)
-        const bash = yield* build(BashTool)
-        const read = yield* build(ReadTool)
-        const glob = yield* build(GlobTool)
-        const grep = yield* build(GrepTool)
-        const edit = yield* build(EditTool)
-        const write = yield* build(WriteTool)
-        const task = yield* build(TaskTool)
-        const fetch = yield* build(WebFetchTool)
-        const todo = yield* build(TodoWriteTool)
-        const search = yield* build(WebSearchTool)
-        const code = yield* build(CodeSearchTool)
-        const skill = yield* build(SkillTool)
-        const patch = yield* build(ApplyPatchTool)
-        const lsp = yield* build(LspTool)
-        const batch = yield* build(BatchTool)
-        const plan = yield* build(PlanExitTool)
+        const all = Effect.fn("ToolRegistry.all")(function* () {
+          const s = yield* InstanceState.get(state)
+          return [...s.builtin, ...s.custom] as Tool.Def[]
+        })
 
-        const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
-          const cfg = yield* config.get()
-          const question =
-            ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-
-          return [
-            invalid,
-            ...(question ? [ask] : []),
-            bash,
-            read,
-            glob,
-            grep,
-            edit,
-            write,
-            task,
-            fetch,
-            todo,
-            search,
-            code,
-            skill,
-            patch,
-            ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [lsp] : []),
-            ...(cfg.experimental?.batch_tool === true ? [batch] : []),
-            ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [plan] : []),
-            ...custom,
-          ]
+        const fromID = Effect.fn("ToolRegistry.fromID")(function* (id: string) {
+          const allTools = yield* all()
+          const match = allTools.find((tool) => tool.id === id)
+          if (!match) return yield* Effect.die(`Tool not found: ${id}`)
+          return match
         })
 
         const ids = Effect.fn("ToolRegistry.ids")(function* () {
-          const s = yield* InstanceState.get(state)
-          const tools = yield* all(s.custom)
-          return tools.map((t) => t.id)
+          return yield* all().pipe(Effect.map((t) => t.map((x) => x.id)))
         })
 
-        const tools = Effect.fn("ToolRegistry.tools")(function* (
-          model: { providerID: ProviderID; modelID: ModelID },
-          agent?: Agent.Info,
-        ) {
-          const s = yield* InstanceState.get(state)
-          const allTools = yield* all(s.custom)
+        const tools = Effect.fn("ToolRegistry.tools")(function* (model: { providerID: ProviderID; modelID: ModelID }) {
+          const allTools = yield* all()
           const filtered = allTools.filter((tool) => {
-            if (tool.id === "codesearch" || tool.id === "websearch") {
+            if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
               return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
             }
 
@@ -195,27 +177,26 @@ export namespace ToolRegistry {
           })
           return yield* Effect.forEach(
             filtered,
-            Effect.fnUntraced(function* (tool: Tool.Info) {
+            Effect.fnUntraced(function* (tool: Tool.Def) {
               using _ = log.time(tool.id)
-              const next = yield* Effect.promise(() => tool.init({ agent }))
               const output = {
-                description: next.description,
-                parameters: next.parameters,
+                description: tool.description,
+                parameters: tool.parameters,
               }
               yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
               return {
                 id: tool.id,
                 description: output.description,
                 parameters: output.parameters,
-                execute: next.execute,
-                formatValidationError: next.formatValidationError,
+                execute: tool.execute,
+                formatValidationError: tool.formatValidationError,
               }
             }),
             { concurrency: "unbounded" },
           )
         })
 
-        return Service.of({ ids, named: { task, read }, tools })
+        return Service.of({ ids, tools, all, fromID })
       }),
     )
 
@@ -236,13 +217,10 @@ export namespace ToolRegistry {
     return runPromise((svc) => svc.ids())
   }
 
-  export async function tools(
-    model: {
-      providerID: ProviderID
-      modelID: ModelID
-    },
-    agent?: Agent.Info,
-  ): Promise<(Tool.Def & { id: string })[]> {
-    return runPromise((svc) => svc.tools(model, agent))
+  export async function tools(model: {
+    providerID: ProviderID
+    modelID: ModelID
+  }): Promise<(Tool.Def & { id: string })[]> {
+    return runPromise((svc) => svc.tools(model))
   }
 }
