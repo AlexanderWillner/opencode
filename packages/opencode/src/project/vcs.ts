@@ -7,7 +7,6 @@ import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
-import { Snapshot } from "@/snapshot"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
 import z from "zod"
@@ -63,7 +62,7 @@ export namespace Vcs {
             additions: stat?.additions ?? (item.status === "added" ? count(after) : 0),
             deletions: stat?.deletions ?? (item.status === "deleted" ? count(before) : 0),
             status: item.status,
-          } satisfies Snapshot.FileDiff
+          } satisfies FileDiff
         }),
       { concurrency: 8 },
     )
@@ -125,11 +124,25 @@ export namespace Vcs {
     })
   export type Info = z.infer<typeof Info>
 
+  export const FileDiff = z
+    .object({
+      file: z.string(),
+      before: z.string(),
+      after: z.string(),
+      additions: z.number(),
+      deletions: z.number(),
+      status: z.enum(["added", "deleted", "modified"]).optional(),
+    })
+    .meta({
+      ref: "VcsFileDiff",
+    })
+  export type FileDiff = z.infer<typeof FileDiff>
+
   export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly branch: () => Effect.Effect<string | undefined>
     readonly defaultBranch: () => Effect.Effect<string | undefined>
-    readonly diff: (mode: Mode) => Effect.Effect<Snapshot.FileDiff[]>
+    readonly diff: (mode: Mode) => Effect.Effect<FileDiff[]>
   }
 
   interface State {
