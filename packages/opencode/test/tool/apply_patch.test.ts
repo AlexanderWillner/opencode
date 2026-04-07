@@ -27,9 +27,7 @@ type AskInput = {
       filePath: string
       relativePath: string
       type: "add" | "update" | "delete" | "move"
-      diff: string
-      before: string
-      after: string
+      patch: string
       additions: number
       deletions: number
       movePath?: string
