@@ -31,6 +31,7 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
+  railWidth: number
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
@@ -50,7 +51,8 @@ export const SidebarContent = (props: {
     <div class="flex h-full w-full min-w-0 overflow-hidden">
       <div
         data-component="sidebar-rail"
-        class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
+        class="shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
+        style={{ width: `${props.railWidth}px` }}
         onMouseMove={props.aimMove}
       >
         <div class="flex-1 min-h-0 w-full">

@@ -34,6 +34,7 @@ export interface Settings {
     fontSize: number
     mono: string
     sans: string
+    sidebarShowProjectName: boolean
   }
   keybinds: Record<string, string>
   permissions: {
@@ -100,6 +101,7 @@ const defaultSettings: Settings = {
     fontSize: 14,
     mono: "",
     sans: "",
+    sidebarShowProjectName: false,
   },
   keybinds: {},
   permissions: {
@@ -202,6 +204,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         uiFont: withFallback(() => store.appearance?.sans, defaultSettings.appearance.sans),
         setUIFont(value: string) {
           setStore("appearance", "sans", value.trim() ? value : "")
+        },
+        sidebarShowProjectName: withFallback(
+          () => store.appearance?.sidebarShowProjectName,
+          defaultSettings.appearance.sidebarShowProjectName,
+        ),
+        setSidebarShowProjectName(value: boolean) {
+          setStore("appearance", "sidebarShowProjectName", value)
         },
       },
       keybinds: {

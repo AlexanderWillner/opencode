@@ -10,6 +10,8 @@ import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
+import { useSettings } from "@/context/settings"
+import { getFilename } from "@opencode-ai/util/path"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 
@@ -77,6 +79,9 @@ const ProjectTile = (props: {
 }): JSX.Element => {
   const notification = useNotification()
   const layout = useLayout()
+  const settings = useSettings()
+  const projectName = createMemo(() => props.project.name || getFilename(props.project.worktree))
+  const showName = createMemo(() => settings.appearance.sidebarShowProjectName())
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -103,7 +108,8 @@ const ProjectTile = (props: {
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "flex items-center justify-center p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          [showName() ? "w-full h-10" : "size-10"]: true,
           "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
           "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
             !props.selected() && !props.active(),
@@ -146,7 +152,11 @@ const ProjectTile = (props: {
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
+        <Show when={showName()} fallback={<ProjectIcon project={props.project} notify />}>
+          <div class="size-full rounded flex items-center justify-center">
+            <span class="text-11-medium leading-tight text-center truncate w-full px-1">{projectName()}</span>
+          </div>
+        </Show>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>

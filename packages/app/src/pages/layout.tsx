@@ -1808,13 +1808,15 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
+  const rail = createMemo(() => (settings.appearance.sidebarShowProjectName() ? 96 : 64))
+
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : rail()
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
-  const panel = createMemo(() => Math.max(side() - 64, 0))
+  const side = createMemo(() => Math.max(layout.sidebar.width(), rail() + 180))
+  const panel = createMemo(() => Math.max(side() - rail(), 0))
 
   const loadedSessionDirs = new Set<string>()
 
@@ -2367,6 +2369,7 @@ export default function Layout(props: ParentProps) {
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
+      railWidth={rail()}
     />
   )
 
@@ -2461,7 +2464,7 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : `${rail()}px`,
               }}
             >
               <main

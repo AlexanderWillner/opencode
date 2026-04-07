@@ -343,6 +343,18 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.sidebarShowProjectName.title")}
+          description={language.t("settings.general.row.sidebarShowProjectName.description")}
+        >
+          <div data-action="settings-sidebar-show-project-name">
+            <Switch
+              checked={settings.appearance.sidebarShowProjectName()}
+              onChange={(checked) => settings.appearance.setSidebarShowProjectName(checked)}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )

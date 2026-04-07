@@ -747,6 +747,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
+  "settings.general.row.sidebarShowProjectName.title": "Show project name in sidebar",
+  "settings.general.row.sidebarShowProjectName.description":
+    "Display the project name as text instead of a single-letter icon in the sidebar",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
