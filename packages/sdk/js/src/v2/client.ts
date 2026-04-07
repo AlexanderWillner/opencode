@@ -77,5 +77,11 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
       workspace: config?.experimental_workspaceID,
     }),
   )
+  client.interceptors.response.use((response) => {
+    const contentType = response.headers.get("content-type")
+    if (contentType === "text/html") throw new Error("Unexpected content-type: " + contentType)
+
+    return response
+  })
   return new OpencodeClient({ client })
 }
